@@ -104,14 +104,10 @@
 #include "fsfeatures.h"
 
 extern const struct btrfs_convert_operations ext2_convert_ops;
-extern const struct btrfs_convert_operations reiserfs_convert_ops;
 
 static const struct btrfs_convert_operations *convert_operations[] = {
 #if BTRFSCONVERT_EXT2
 	&ext2_convert_ops,
-#endif
-#if BTRFSCONVERT_REISERFS
-	&reiserfs_convert_ops,
 #endif
 };
 
@@ -957,7 +953,7 @@ static int init_btrfs(struct btrfs_mkfs_config *cfg, struct btrfs_root *root,
 		ret = PTR_ERR(trans);
 		goto err;
 	}
-	ret = btrfs_fix_block_accounting(trans);
+	ret = btrfs_fix_block_accounting(trans, root);
 	if (ret)
 		goto err;
 	ret = make_convert_data_block_groups(trans, fs_info, cfg, cctx);
@@ -1026,7 +1022,7 @@ static int migrate_super_block(int fd, u64 old_bytenr)
 	BUG_ON(btrfs_super_bytenr(super) != old_bytenr);
 	btrfs_set_super_bytenr(super, BTRFS_SUPER_INFO_OFFSET);
 
-	csum_tree_block_size(buf, btrfs_csum_sizes[BTRFS_CSUM_TYPE_CRC32], 0);
+	csum_tree_block_size(buf, BTRFS_CRC32_SIZE, 0);
 	ret = pwrite(fd, buf->data, BTRFS_SUPER_INFO_SIZE,
 		BTRFS_SUPER_INFO_OFFSET);
 	if (ret != BTRFS_SUPER_INFO_SIZE)
@@ -1140,7 +1136,7 @@ static int do_convert(const char *devname, u32 convert_flags, u32 nodesize,
 	}
 
 	root = open_ctree_fd(fd, devname, mkfs_cfg.super_bytenr,
-			     OPEN_CTREE_WRITES | OPEN_CTREE_TEMPORARY_SUPER);
+			     OPEN_CTREE_WRITES | OPEN_CTREE_FS_PARTIAL);
 	if (!root) {
 		error("unable to open ctree");
 		goto fail;
@@ -1230,7 +1226,7 @@ static int do_convert(const char *devname, u32 convert_flags, u32 nodesize,
 	}
 
 	root = open_ctree_fd(fd, devname, 0,
-			     OPEN_CTREE_WRITES | OPEN_CTREE_TEMPORARY_SUPER);
+			OPEN_CTREE_WRITES | OPEN_CTREE_FS_PARTIAL);
 	if (!root) {
 		error("unable to open ctree for finalization");
 		goto fail;
@@ -1675,9 +1671,8 @@ static void print_usage(void)
 	printf("\t--no-progress          show only overview, not the detailed progress\n");
 	printf("\n");
 	printf("Supported filesystems:\n");
-	printf("\text2/3/4: %s\n", BTRFSCONVERT_EXT2 ? "yes" : "no");
-	printf("\treiserfs: %s\n", BTRFSCONVERT_REISERFS ? "yes" : "no");
-}
+	printf("\text2/3/4: %s\n", BTRFSCONVERT_EXT2 ? "yes" : "no")
+;}
 
 int main(int argc, char *argv[])
 {
