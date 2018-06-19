@@ -28,8 +28,6 @@
 #include <linux/limits.h>
 #include <getopt.h>
 
-#include <btrfsutil.h>
-
 #include "kerncompat.h"
 #include "ctree.h"
 #include "utils.h"
@@ -815,16 +813,25 @@ static const char * const cmd_filesystem_sync_usage[] = {
 
 static int cmd_filesystem_sync(int argc, char **argv)
 {
-	enum btrfs_util_error err;
+	int 	fd, res;
+	char	*path;
+	DIR	*dirstream = NULL;
 
 	clean_args_no_options(argc, argv, cmd_filesystem_sync_usage);
 
 	if (check_argc_exact(argc - optind, 1))
 		usage(cmd_filesystem_sync_usage);
 
-	err = btrfs_util_sync(argv[optind]);
-	if (err) {
-		error_btrfs_util(err);
+	path = argv[optind];
+
+	fd = btrfs_open_dir(path, &dirstream, 1);
+	if (fd < 0)
+		return 1;
+
+	res = ioctl(fd, BTRFS_IOC_SYNC);
+	close_file_or_dir(fd, dirstream);
+	if( res < 0 ){
+		error("sync ioctl failed on '%s': %m", path);
 		return 1;
 	}
 
@@ -1086,7 +1093,7 @@ static int cmd_filesystem_resize(int argc, char **argv)
 	DIR	*dirstream = NULL;
 	struct stat st;
 
-	clean_args_no_options_relaxed(argc, argv);
+	clean_args_no_options_relaxed(argc, argv, cmd_filesystem_resize_usage);
 
 	if (check_argc_exact(argc - optind, 2))
 		usage(cmd_filesystem_resize_usage);
